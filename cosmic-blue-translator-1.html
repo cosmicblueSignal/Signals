@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cosmic Blue · Translation</title>
+<style>
+:root{--bg:#050505;--fg:#f5f5f5;--muted:#8c8c8c;--red:#d40000;--line:#262626}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:Arial,Helvetica,sans-serif;min-height:100vh;display:grid;place-items:center;padding:40px 20px}
+main{width:min(760px,100%);padding:48px 0 56px}
+.brand{font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:var(--muted);margin-bottom:70px}
+.signal{font-size:12px;letter-spacing:.22em;color:var(--red);text-transform:uppercase;margin-bottom:18px}
+.symbols{font-size:clamp(30px,7vw,62px);line-height:1.25;letter-spacing:.12em;word-break:break-word;margin-bottom:42px}
+.rule{height:1px;background:var(--line);margin:0 0 30px}
+.label{font-size:10px;letter-spacing:.25em;color:var(--muted);text-transform:uppercase;margin-bottom:14px}
+.translation{font-family:Georgia,"Times New Roman",serif;font-size:clamp(26px,5vw,46px);line-height:1.18}
+.footer{margin-top:80px;font-size:10px;letter-spacing:.16em;color:#555;text-transform:uppercase}
+
+/* encoder-only UI */
+.encoder input{width:100%;background:transparent;border:none;border-bottom:1px solid var(--line);color:var(--fg);font-family:Georgia,"Times New Roman",serif;font-size:clamp(20px,4vw,30px);padding:8px 0;margin-bottom:42px;outline:none}
+.encoder input:focus{border-bottom-color:var(--red)}
+.linkbox{display:flex;align-items:center;gap:10px;border:1px solid var(--line);padding:12px 14px;margin-top:18px}
+.linkbox span{font-size:11px;color:var(--muted);word-break:break-all;flex:1}
+.linkbox button{background:var(--red);color:#fff;border:none;padding:8px 14px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
+.hint{font-size:11px;color:#555;margin-top:10px;line-height:1.6}
+.hint.warn{color:var(--red)}
+#qr{margin-top:34px;display:flex;justify-content:center}
+#qr img{background:#fff;padding:10px;display:block}
+#qr.empty{display:none}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+/* ---- shared cipher: one symbol per letter/digit ---- */
+const LETTERS = {
+  A:'⟁', B:'⌖', C:'◈', D:'⌬', E:'⟟', F:'◬', G:'⎔', H:'⏣', I:'⌁',
+  J:'◊', K:'⟒', L:'⌗', M:'◭', N:'⟠', O:'◉', P:'⌆', Q:'⟡', R:'⌔',
+  S:'ϟ', T:'⟐', U:'◍', V:'⌇', W:'⟲', X:'⟿', Y:'⌾', Z:'⟴'
+};
+const DIGITS = { '0':'◯','1':'⌀','2':'⌂','3':'⌃','4':'⌄','5':'⌅','6':'⌋','7':'⌊','8':'⎋','9':'⏥' };
+const TO_SYMBOL = {...LETTERS, ...DIGITS};
+const TO_LETTER = Object.fromEntries(Object.entries(TO_SYMBOL).map(([k,v]) => [v,k]));
+
+/* legacy fixed phrases from the first prototype (id=...) still work */
+const LEGACY = {
+  "not-from-here": { symbols: "⌁ ◇ ⟟ · ϟ ⟐ · ⟟ ◈ · ⌁ ◇ ⟟", english: "NOT FROM HERE" }
+};
+
+function encode(text){
+  return text.trim().toUpperCase().split(/\s+/).map(word =>
+    [...word].map(ch => TO_SYMBOL[ch] || '').join('')
+  ).join(' · ');
+}
+function decode(symbolString){
+  return symbolString.split('·').map(word =>
+    [...word.trim()].map(sym => TO_LETTER[sym] || '').join('')
+  ).join(' ').trim();
+}
+
+const params = new URLSearchParams(location.search);
+const app = document.getElementById('app');
+
+function renderDecoded(symbols, english){
+  app.innerHTML = `
+    <div class="brand">COSMIC BLUE / TRANSLATION ARCHIVE</div>
+    <div class="signal">Transmission decoded</div>
+    <div class="symbols">${symbols}</div>
+    <div class="rule"></div>
+    <div class="label">English translation</div>
+    <div class="translation">${english}</div>
+    <div class="footer">Archive // Scanned</div>`;
+}
+
+function renderEncoder(){
+  app.innerHTML = `
+    <div class="brand">COSMIC BLUE / TRANSLATION ARCHIVE</div>
+    <div class="signal">New transmission</div>
+    <div class="encoder">
+      <input id="phrase" type="text" placeholder="Type your phrase..." maxlength="60" autofocus>
+    </div>
+    <div class="rule"></div>
+    <div class="label">Alien symbols (for the logo)</div>
+    <div id="out" class="symbols">—</div>
+    <div class="linkbox">
+      <span id="link"></span>
+      <button id="copy">Copy link</button>
+    </div>
+    <p class="hint" id="hostHint"></p>
+    <div id="qr" class="empty"></div>
+    <div class="footer">Archive // New</div>`;
+
+  const input = document.getElementById('phrase');
+  const out = document.getElementById('out');
+  const link = document.getElementById('link');
+  const qrBox = document.getElementById('qr');
+  const hostHint = document.getElementById('hostHint');
+
+  const isHosted = location.protocol === 'https:' || location.protocol === 'http:';
+  hostHint.textContent = isHosted
+    ? 'Este QR es el que va en la prenda. Al escanearlo, esta misma página muestra la traducción en vez del formulario.'
+    : 'Estás viendo el archivo local (file://) — el QR de abajo NO va a funcionar en otro teléfono todavía. Sube este archivo a un hosting gratuito (ej. GitHub Pages) y vuelve a abrirlo desde esa URL para generar el QR real.';
+  if(!isHosted) hostHint.classList.add('warn');
+
+  function update(){
+    const val = input.value;
+    if(!val.trim()){
+      out.textContent = '—'; link.textContent = ''; qrBox.classList.add('empty'); qrBox.innerHTML = '';
+      return;
+    }
+    const symbols = encode(val);
+    out.textContent = symbols;
+    const url = `${location.origin}${location.pathname}?text=${encodeURIComponent(symbols)}`;
+    link.textContent = url;
+
+    qrBox.innerHTML = '';
+    if(isHosted){
+      qrBox.classList.remove('empty');
+      const img = document.createElement('img');
+      img.width = 160; img.height = 160;
+      img.alt = 'QR';
+      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(url)}`;
+      qrBox.appendChild(img);
+    } else {
+      qrBox.classList.add('empty');
+    }
+  }
+  input.addEventListener('input', update);
+  document.getElementById('copy').addEventListener('click', () => {
+    if(link.textContent) navigator.clipboard.writeText(link.textContent);
+  });
+}
+
+if(params.get('id') && LEGACY[params.get('id')]){
+  const item = LEGACY[params.get('id')];
+  renderDecoded(item.symbols, item.english);
+} else if(params.get('text')){
+  const symbols = params.get('text');
+  renderDecoded(symbols, decode(symbols) || '???');
+} else {
+  renderEncoder();
+}
+</script>
+</body>
+</html>
